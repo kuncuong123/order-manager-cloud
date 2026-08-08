@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Ứng dụng quản lý đơn hàng hiện đại">
+  <title>Orderly — Quản lý đơn hàng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Orderly">
+        <span class="brand-mark">O</span>
+        <span>orderly</span>
+      </a>
+      <nav aria-label="Điều hướng chính">
+        <a class="nav-link active" href="#orders">
+          <span class="nav-icon">▦</span> Đơn hàng
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="status-dot"></span>
+        <div><strong>Hệ thống</strong><small>Đang hoạt động</small></div>
+      </div>
+    </aside>
+
+    <main class="main-content" id="orders">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">TỔNG QUAN</p>
+          <h1>Quản lý đơn hàng</h1>
+          <p class="subtitle">Theo dõi, cập nhật và quản lý đơn hàng của bạn.</p>
+        </div>
+        <button class="button button-primary" id="add-order-button"><span>＋</span> Thêm đơn hàng</button>
+      </header>
+
+      <section class="stats-grid" aria-label="Thống kê">
+        <article class="stat-card revenue">
+          <div class="stat-icon">↗</div>
+          <div><p>Tổng doanh thu</p><strong id="total-revenue">0 ₫</strong></div>
+          <span class="stat-glow"></span>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon purple">▤</div>
+          <div><p>Tổng đơn hàng</p><strong id="total-orders">0</strong></div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon amber">◷</div>
+          <div><p>Đang xử lý</p><strong id="processing-orders">0</strong></div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon green">✓</div>
+          <div><p>Hoàn thành</p><strong id="completed-orders">0</strong></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div><h2>Danh sách đơn hàng</h2><p id="result-count">Đang tải dữ liệu...</p></div>
+          <div class="toolbar">
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="search-input" type="search" placeholder="Tìm khách hàng, sản phẩm..." aria-label="Tìm kiếm">
+            </label>
+            <select id="status-filter" aria-label="Lọc trạng thái">
+              <option value="">Tất cả trạng thái</option>
+              <option>Mới</option>
+              <option>Đang xử lý</option>
+              <option>Hoàn thành</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>MÃ ĐƠN</th><th>KHÁCH HÀNG</th><th>SẢN PHẨM</th><th>SỐ LƯỢNG</th><th>TỔNG TIỀN</th><th>TRẠNG THÁI</th><th></th></tr></thead>
+            <tbody id="orders-body"></tbody>
+          </table>
+          <div class="empty-state" id="empty-state" hidden>
+            <div class="empty-icon">▤</div>
+            <h3>Chưa có đơn hàng</h3>
+            <p>Thêm đơn hàng đầu tiên để bắt đầu quản lý.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="order-modal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <div><p class="eyebrow">ĐƠN HÀNG</p><h2 id="modal-title">Thêm đơn hàng</h2></div>
+        <button class="icon-button" id="close-modal" aria-label="Đóng">×</button>
+      </div>
+      <form id="order-form">
+        <input type="hidden" id="order-id">
+        <div class="form-grid">
+          <label class="full">Tên khách hàng<input id="customer-name" maxlength="120" required placeholder="Ví dụ: Nguyễn Minh Anh"></label>
+          <label class="full">Tên sản phẩm<input id="product-name" maxlength="160" required placeholder="Ví dụ: Bàn phím cơ"></label>
+          <label>Số lượng<input id="quantity" type="number" min="1" max="1000000" value="1" required></label>
+          <label>Đơn giá (VNĐ)<input id="unit-price" type="number" min="0" max="1000000000000" step="1000" required placeholder="0"></label>
+          <label class="full">Trạng thái<select id="status" required><option>Mới</option><option>Đang xử lý</option><option>Hoàn thành</option></select></label>
+          <label class="full">Ghi chú<textarea id="note" maxlength="1000" rows="3" placeholder="Thông tin thêm (không bắt buộc)"></textarea></label>
+        </div>
+        <p class="form-error" id="form-error" role="alert"></p>
+        <div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-button">Hủy</button><button type="submit" class="button button-primary" id="save-button">Lưu đơn hàng</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="delete-modal" hidden>
+    <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title">
+      <div class="danger-icon">!</div>
+      <h2 id="delete-title">Xóa đơn hàng?</h2>
+      <p>Hành động này không thể hoàn tác. Đơn hàng sẽ bị xóa vĩnh viễn.</p>
+      <div class="modal-actions"><button class="button button-secondary" id="cancel-delete">Hủy</button><button class="button button-danger" id="confirm-delete">Xóa đơn hàng</button></div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
