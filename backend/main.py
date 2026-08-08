@@ -1,12 +1,20 @@
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import case, delete, func, insert, select, update
 
-from database import database_connection, init_database
-from models import Order, OrderCreate, OrderSummary, OrderUpdate
+try:
+    # Package import, e.g. `uvicorn backend.main:app` from the repository root.
+    from .database import database_connection, init_database, orders
+    from .models import Order, OrderCreate, OrderSummary, OrderUpdate
+except ImportError:
+    # Script import, e.g. `uvicorn main:app` with Render Root Directory = backend.
+    from database import database_connection, init_database, orders
+    from models import Order, OrderCreate, OrderSummary, OrderUpdate
 
 
 @asynccontextmanager
@@ -27,36 +35,35 @@ app.add_middleware(
 
 
 def serialize_order(row) -> dict:
-    data = dict(row)
+    data = dict(row._mapping)
+    for field in ("created_at", "updated_at"):
+        if isinstance(data[field], datetime):
+            data[field] = data[field].isoformat(sep=" ")
     data["total"] = round(data["quantity"] * data["unit_price"], 2)
     return data
 
 
 @app.get("/api/orders", response_model=list[Order])
 def list_orders():
+    statement = select(orders).order_by(orders.c.created_at.desc(), orders.c.id.desc())
     with database_connection() as connection:
-        rows = connection.execute(
-            "SELECT * FROM orders ORDER BY datetime(created_at) DESC, id DESC"
-        ).fetchall()
+        rows = connection.execute(statement).fetchall()
     return [serialize_order(row) for row in rows]
 
 
 @app.get("/api/orders/summary", response_model=OrderSummary)
 def get_summary():
+    statement = select(
+        func.count().label("total_orders"),
+        func.coalesce(func.sum(orders.c.quantity * orders.c.unit_price), 0).label("total_revenue"),
+        func.sum(case((orders.c.status == "Hoàn thành", 1), else_=0)).label("completed_orders"),
+        func.sum(case((orders.c.status == "Đang xử lý", 1), else_=0)).label("processing_orders"),
+    ).select_from(orders)
     with database_connection() as connection:
-        row = connection.execute(
-            """
-            SELECT
-                COUNT(*) AS total_orders,
-                COALESCE(SUM(quantity * unit_price), 0) AS total_revenue,
-                SUM(CASE WHEN status = 'Hoàn thành' THEN 1 ELSE 0 END) AS completed_orders,
-                SUM(CASE WHEN status = 'Đang xử lý' THEN 1 ELSE 0 END) AS processing_orders
-            FROM orders
-            """
-        ).fetchone()
+        row = connection.execute(statement).one()._mapping
     return {
         "total_orders": row["total_orders"],
-        "total_revenue": round(row["total_revenue"], 2),
+        "total_revenue": round(float(row["total_revenue"]), 2),
         "completed_orders": row["completed_orders"] or 0,
         "processing_orders": row["processing_orders"] or 0,
     }
@@ -65,7 +72,7 @@ def get_summary():
 @app.get("/api/orders/{order_id}", response_model=Order)
 def get_order(order_id: int):
     with database_connection() as connection:
-        row = connection.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+        row = connection.execute(select(orders).where(orders.c.id == order_id)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     return serialize_order(row)
@@ -73,53 +80,37 @@ def get_order(order_id: int):
 
 @app.post("/api/orders", response_model=Order, status_code=status.HTTP_201_CREATED)
 def create_order(order: OrderCreate):
-    payload = order.model_dump()
     with database_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO orders (customer_name, product_name, quantity, unit_price, status, note)
-            VALUES (:customer_name, :product_name, :quantity, :unit_price, :status, :note)
-            """,
-            payload,
-        )
-        row = connection.execute("SELECT * FROM orders WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        result = connection.execute(insert(orders).values(**order.model_dump()))
+        order_id = result.inserted_primary_key[0]
+        row = connection.execute(select(orders).where(orders.c.id == order_id)).one()
     return serialize_order(row)
 
 
 @app.put("/api/orders/{order_id}", response_model=Order)
 def update_order(order_id: int, order: OrderUpdate):
-    payload = order.model_dump()
-    payload["id"] = order_id
+    statement = (
+        update(orders)
+        .where(orders.c.id == order_id)
+        .values(**order.model_dump(), updated_at=func.now())
+    )
     with database_connection() as connection:
-        cursor = connection.execute(
-            """
-            UPDATE orders SET
-                customer_name = :customer_name,
-                product_name = :product_name,
-                quantity = :quantity,
-                unit_price = :unit_price,
-                status = :status,
-                note = :note,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = :id
-            """,
-            payload,
-        )
-        if cursor.rowcount == 0:
+        result = connection.execute(statement)
+        if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
-        row = connection.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+        row = connection.execute(select(orders).where(orders.c.id == order_id)).one()
     return serialize_order(row)
 
 
 @app.delete("/api/orders/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_order(order_id: int):
     with database_connection() as connection:
-        cursor = connection.execute("DELETE FROM orders WHERE id = ?", (order_id,))
-        if cursor.rowcount == 0:
+        result = connection.execute(delete(orders).where(orders.c.id == order_id))
+        if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-# Khai báo cuối cùng để các route /api luôn được ưu tiên trước file tĩnh.
+# Mount last so /api routes always take precedence over static files.
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
