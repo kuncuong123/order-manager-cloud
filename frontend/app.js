@@ -1,8 +1,4 @@
-const isLocalFrontendServer = ["localhost", "127.0.0.1"].includes(window.location.hostname)
-  && window.location.port && window.location.port !== "8000";
-const API_URL = isLocalFrontendServer
-  ? "http://127.0.0.1:8000/api/orders"
-  : "/api/orders";
+const API_URL = "https://order-manager-cloud.onrender.com/api/orders";
 
 const state = { orders: [], deletingId: null };
 const $ = (selector) => document.querySelector(selector);
